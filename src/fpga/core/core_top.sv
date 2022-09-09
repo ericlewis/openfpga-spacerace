@@ -468,10 +468,7 @@ mf_pllbase mp1 (
   wire VIDEO, SCORE;
   wire HSYNC, VSYNC, HBLANK, VBLANK;
 
-  // FIXME: These video settings are not correct, they approximate at best what the original core did.
-  // trying to use any d value above 100 causes sync issues, and trying to use hex values also causes sync issues.
-  // Super duper awesome, help wanted.
-  wire [7:0]  video = VIDEO ? 8'd100 : SCORE ? 8'd100 : 8'd0;
+  wire [7:0]  video = (VIDEO ? 8'd255 : (SCORE ? 8'd187 : 8'd0));
 
   // Does not do anything - just to satisfy the top.
   wire CLK_CORE_VIDEO;
@@ -502,9 +499,7 @@ mf_pllbase mp1 (
 
     if (~(VBLANK || HBLANK)) begin
       video_de_reg <= 1;
-      video_rgb_reg[23:16] <= video;
-      video_rgb_reg[15:8]  <= video;
-      video_rgb_reg[7:0]   <= video;
+      video_rgb_reg <= {3{video}};
     end
 
     // Set HSync and VSync to be high for a single cycle on the falling edge of the HSync and VSync coming out of Space Race
