@@ -594,7 +594,7 @@ wire DOWN2_N = ~cont2_key[1];
 
 // Holding down COIN_SW longer than necessary will corrupt or freeze
 // the screen, so limit COIN_SW period to the minimum necessary.
-wire coin_sw_raw = cont1_key[15] | cont2_key[15];
+wire coin_sw_raw = cont1_key[14] | cont2_key[14];
 reg  coin_sw_raw_q;
 wire coin_sw_rise = coin_sw_raw & ~coin_sw_raw_q;
 always_ff @(posedge clk_sys) coin_sw_raw_q <= coin_sw_raw;
@@ -616,7 +616,7 @@ always_ff @(posedge clk_sys) begin
   end
 end
 
-wire START_GAME = cont1_key[14] | cont2_key[14];
+wire START_GAME = cont1_key[15] | cont2_key[15];
 
 ////////////////////////////////////////////
 // Core Instance

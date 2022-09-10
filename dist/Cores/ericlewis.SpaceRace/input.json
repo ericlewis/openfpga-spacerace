@@ -7,13 +7,13 @@
                 "mappings": [
                   {
                     "id": 2,
-                    "name": "P1 Start",
-                    "key": "pad_btn_select"
+                    "name": "Start",
+                    "key": "pad_btn_start"
                   },
                   {
                     "id": 3,
                     "name": "Insert Coin",
-                    "key": "pad_btn_start"
+                    "key": "pad_btn_select"
                   }
                 ]
             }
