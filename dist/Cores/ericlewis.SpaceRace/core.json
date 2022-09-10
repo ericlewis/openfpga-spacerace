@@ -7,7 +7,7 @@
             "description": "Race in space!",
             "author": "ericlewis",
             "url": "https://github.com/ericlewis/openfpga-spacerace",
-            "version": "0.0.2",
+            "version": "0.0.3",
             "date_release": "2022-09-09"
         },
         "framework": {
