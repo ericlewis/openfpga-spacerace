@@ -15,10 +15,7 @@
 
 ## Known Issues
 
-+ Sound is a bit harsh.
-+ Colors are a bit dim.
 + DIP switches are not implemented.
-+ No platform image.
 
 ## License
 
