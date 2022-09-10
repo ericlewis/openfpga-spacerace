@@ -513,7 +513,7 @@ mf_pllbase mp1 (
 // Core Sound
 ////////////////////////////////////////////
 
-  wire [15:1] SOUND;
+  wire [15:0] SOUND;
 
   //
   // audio i2s square wave generator
@@ -641,7 +641,7 @@ space_race_top space_race_top(
   .VIDEO,  .SCORE,
   .HSYNC,  .VSYNC,
   .HBLANK, .VBLANK,
-  .SOUND(SOUND),
+  .SOUND,
   .CREDIT_LIGHT_N
 );
     
