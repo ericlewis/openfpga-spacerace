@@ -6,6 +6,16 @@
                 "type": "default",
                 "mappings": [
                   {
+                    "id": 0,
+                    "name": "P2 Move Up",
+                    "key": "pad_btn_x"
+                  },
+                  {
+                    "id": 1,
+                    "name": "P2 Move Down",
+                    "key": "pad_btn_b"
+                  },
+                  {
                     "id": 2,
                     "name": "Start",
                     "key": "pad_btn_start"

@@ -457,144 +457,175 @@ mf_pllbase mp1 (
     .locked         ( pll_core_locked )
 );
 
+////////////////////////////////////////////
+// Core Settings
+////////////////////////////////////////////
+
+reg        disable_p2_on_pad_1 = 0;
+reg        COINAGE  = 1'b0;
+reg [3:0]  PLAYTIME = 4'd10;
+
+always @(posedge clk_74a)
+  begin
+    if(bridge_wr) begin
+      casex(bridge_addr)
+        32'h00300000: begin
+          disable_p2_on_pad_1 <= bridge_wr_data[0:0];
+        end
+        32'h00400000: begin
+          COINAGE <= bridge_wr_data[0:0];
+        end
+        32'h00500000: begin
+          PLAYTIME <= bridge_wr_data[3:0];
+        end
+      endcase
+    end
+end
 
 ////////////////////////////////////////////
 // Core Video
 ////////////////////////////////////////////
 
-  assign video_rgb_clock = clk_vid_7_16;
-  assign video_rgb_clock_90 = clk_vid_7_16_90deg;
+assign video_rgb_clock = clk_vid_7_16;
+assign video_rgb_clock_90 = clk_vid_7_16_90deg;
 
-  wire VIDEO, SCORE;
-  wire HSYNC, VSYNC, HBLANK, VBLANK;
+wire VIDEO, SCORE;
+wire HSYNC, VSYNC, HBLANK, VBLANK;
 
-  wire [7:0]  video = (VIDEO ? 8'd255 : (SCORE ? 8'd187 : 8'd0));
+wire [7:0]  video = (VIDEO ? 8'd255 : (SCORE ? 8'd187 : 8'd0));
 
-  // Does not do anything - just to satisfy the top.
-  wire CLK_CORE_VIDEO;
+// Does not do anything - just to satisfy the top.
+wire CLK_CORE_VIDEO;
 
-  //
-  // Video cleanup
-  // APF scaler requires HSync and VSync to last for a single clock, and video_rgb to be 0 when video_de is low
-  //
-  reg video_de_reg;
-  reg video_hs_reg;
-  reg video_vs_reg;
-  reg [23:0] video_rgb_reg;
+//
+// Video cleanup
+// APF scaler requires HSync and VSync to last for a single clock, and video_rgb to be 0 when video_de is low
+//
+reg video_de_reg;
+reg video_hs_reg;
+reg video_vs_reg;
+reg [23:0] video_rgb_reg;
 
-  assign video_de = video_de_reg;
-  assign video_hs = video_hs_reg;
-  assign video_vs = video_vs_reg;
-  assign video_rgb = video_rgb_reg;
+assign video_de = video_de_reg;
+assign video_hs = video_hs_reg;
+assign video_vs = video_vs_reg;
+assign video_rgb = video_rgb_reg;
 
-  reg hs_prev;
-  reg vs_prev;
-  reg de_prev;
-  reg [7:0] rgb_prev;
+reg hs_prev;
+reg vs_prev;
+reg de_prev;
+reg [7:0] rgb_prev;
 
-  always @(posedge clk_vid_7_16)
-  begin
-    video_de_reg <= 0;
-    video_rgb_reg <= 24'h0;
+always @(posedge clk_vid_7_16) begin
+  video_de_reg <= 0;
+  video_rgb_reg <= 24'h0;
 
-    if (~(VBLANK || HBLANK)) begin
-      video_de_reg <= 1;
-      video_rgb_reg <= {3{video}};
-    end
-
-    // Set HSync and VSync to be high for a single cycle on the falling edge of the HSync and VSync coming out of Space Race
-    video_hs_reg <= ~hs_prev && HSYNC;
-    video_vs_reg <= ~vs_prev && VSYNC;
-    hs_prev <= HSYNC;
-    vs_prev <= VSYNC;
+  if (~(VBLANK || HBLANK)) begin
+    video_de_reg <= 1;
+    video_rgb_reg <= {3{video}};
   end
+
+  // Set HSync and VSync to be high for a single cycle on the falling edge of the HSync and VSync coming out of Space Race
+  video_hs_reg <= ~hs_prev && HSYNC;
+  video_vs_reg <= ~vs_prev && VSYNC;
+  hs_prev <= HSYNC;
+  vs_prev <= VSYNC;
+end
 
 ////////////////////////////////////////////
 // Core Sound
 ////////////////////////////////////////////
 
-  wire [15:0] SOUND;
+wire [15:0] SOUND;
 
-  //
-  // audio i2s square wave generator
-  //
+assign audio_mclk = audgen_mclk;
+assign audio_dac = audgen_dac;
+assign audio_lrck = audgen_lrck;
 
-  assign audio_mclk = audgen_mclk;
-  assign audio_dac = audgen_dac;
-  assign audio_lrck = audgen_lrck;
+reg				audgen_nextsamp;
 
-  reg				audgen_nextsamp;
-
-  // generate MCLK = 12.288mhz with fractional accumulator
-  reg         [21:0]  audgen_accum;
-  reg                 audgen_mclk;
-  parameter   [20:0]  CYCLE_48KHZ = 21'd122880 * 2;
-  always @(posedge clk_74a)
-  begin
-    audgen_accum <= audgen_accum + CYCLE_48KHZ;
-    if(audgen_accum >= 21'd742500)
-    begin
-      audgen_mclk <= ~audgen_mclk;
-      audgen_accum <= audgen_accum - 21'd742500 + CYCLE_48KHZ;
-    end
+// generate MCLK = 12.288mhz with fractional accumulator
+reg         [21:0]  audgen_accum;
+reg                 audgen_mclk;
+parameter   [20:0]  CYCLE_48KHZ = 21'd122880 * 2;
+always @(posedge clk_74a)
+begin
+  audgen_accum <= audgen_accum + CYCLE_48KHZ;
+  if(audgen_accum >= 21'd742500) begin
+    audgen_mclk <= ~audgen_mclk;
+    audgen_accum <= audgen_accum - 21'd742500 + CYCLE_48KHZ;
   end
+end
 
-  // generate SCLK = 3.072mhz by dividing MCLK by 4
-  reg [1:0]   aud_mclk_divider;
-  wire        audgen_sclk = aud_mclk_divider[1] /* synthesis keep*/;
-  always @(posedge audgen_mclk)
-  begin
-    aud_mclk_divider <= aud_mclk_divider + 1'b1;
-  end
+// generate SCLK = 3.072mhz by dividing MCLK by 4
+reg [1:0]   aud_mclk_divider;
+wire        audgen_sclk = aud_mclk_divider[1] /* synthesis keep*/;
+always @(posedge audgen_mclk) begin
+  aud_mclk_divider <= aud_mclk_divider + 1'b1;
+end
 
-  // shift out audio data as I2S
-  // 32 total bits per channel, but only 16 active bits at the start and then 16 dummy bits
-  //
-  // synchronize audio samples coming from the core
-  wire	[31:0]	audgen_sampdata_s;
-  synch_3 #(.WIDTH(32)) s5(({SOUND, SOUND}), audgen_sampdata_s, audgen_sclk);
-  reg		[31:0]	audgen_sampshift;
-  reg		[4:0]	audgen_lrck_cnt;
-  reg				audgen_lrck;
-  reg				audgen_dac;
-  always @(negedge audgen_sclk)
-  begin
-    // output the next bit
-    audgen_dac <= audgen_sampshift[31];
+// shift out audio data as I2S
+// 32 total bits per channel, but only 16 active bits at the start and then 16 dummy bits
+//
+// synchronize audio samples coming from the core
+wire	[31:0]	audgen_sampdata_s;
+synch_3 #(.WIDTH(32)) s5({SOUND, SOUND}, audgen_sampdata_s, audgen_sclk);
+reg		[31:0]	audgen_sampshift;
+reg		[4:0]	audgen_lrck_cnt;
+reg				audgen_lrck;
+reg				audgen_dac;
+always @(negedge audgen_sclk) begin
+  // output the next bit
+  audgen_dac <= audgen_sampshift[31];
 
-    // 48khz * 64
-    audgen_lrck_cnt <= audgen_lrck_cnt + 1'b1;
-    if(audgen_lrck_cnt == 31)
-    begin
-      // switch channels
-      audgen_lrck <= ~audgen_lrck;
+  // 48khz * 64
+  audgen_lrck_cnt <= audgen_lrck_cnt + 1'b1;
+  if(audgen_lrck_cnt == 31) begin
+    // switch channels
+    audgen_lrck <= ~audgen_lrck;
 
-      // Reload sample shifter
-      if(~audgen_lrck)
-      begin
-        audgen_sampshift <= audgen_sampdata_s;
-      end
+    // Reload sample shifter
+    if(~audgen_lrck) begin
+      audgen_sampshift <= audgen_sampdata_s;
     end
-    else if(audgen_lrck_cnt < 16)
-    begin
-      // only shift for 16 clocks per channel
-      audgen_sampshift <= {audgen_sampshift[30:0], 1'b0};
-    end
+  end else if(audgen_lrck_cnt < 16) begin
+    // only shift for 16 clocks per channel
+    audgen_sampshift <= {audgen_sampshift[30:0], 1'b0};
   end
+end
 
 
 ////////////////////////////////////////////
 // Core Controls
 ////////////////////////////////////////////
 
-wire UP1_N   = ~cont1_key[0];
-wire DOWN1_N = ~cont1_key[1];
-wire UP2_N   = ~cont2_key[0];
-wire DOWN2_N = ~cont2_key[1];
+wire [15:0] cont1_key_s;
+wire [15:0] cont2_key_s;
+
+synch_2 #(
+  .WIDTH(16)
+) cont1_s (
+  cont1_key,
+  cont1_key_s,
+  clk_sys
+);
+
+synch_2 #(
+  .WIDTH(16)
+) cont2_s (
+  cont2_key,
+  cont2_key_s,
+  clk_sys
+);
+
+wire UP1_N   = ~cont1_key_s[0];
+wire DOWN1_N = ~cont1_key_s[1];
+wire UP2_N   = ~(disable_p2_on_pad_1 ? cont2_key_s[0] : cont1_key_s[6] || cont2_key_s[0]);
+wire DOWN2_N = ~(disable_p2_on_pad_1 ? cont2_key_s[1] : cont1_key_s[5] || cont2_key_s[1]);
 
 // Holding down COIN_SW longer than necessary will corrupt or freeze
 // the screen, so limit COIN_SW period to the minimum necessary.
-wire coin_sw_raw = cont1_key[14] | cont2_key[14];
+wire coin_sw_raw = cont1_key_s[14] | cont2_key_s[14];
 reg  coin_sw_raw_q;
 wire coin_sw_rise = coin_sw_raw & ~coin_sw_raw_q;
 always_ff @(posedge clk_sys) coin_sw_raw_q <= coin_sw_raw;
@@ -622,9 +653,7 @@ wire START_GAME = cont1_key[15] | cont2_key[15];
 // Core Instance
 ////////////////////////////////////////////
 
-wire       COINAGE  = 1'b0;
-wire [3:0] PLAYTIME = 3'd1;
-wire       CREDIT_LIGHT_N;
+wire CREDIT_LIGHT_N;
 
 space_race_top space_race_top(
   .CLK_DRV(clk_sys),
