@@ -28,14 +28,15 @@ module sound_i2s #(
     parameter SIGNED_INPUT  = 0
 ) (
     input wire clk_74a,
+    input wire clk_audio,
 
     // Left and right audio channels. Can be in an arbitrary clock domain
     input wire [CHANNEL_WIDTH - 1:0] audio_l,
     input wire [CHANNEL_WIDTH - 1:0] audio_r,
 
-    output reg audgen_mclk,
-    output reg audgen_lrck,
-    output reg audgen_dac
+    output reg audio_mclk,
+    output reg audio_lrck,
+    output reg audio_dac
 );
   //
   // audio i2s generator
@@ -44,21 +45,27 @@ module sound_i2s #(
   reg audgen_nextsamp;
 
   // generate MCLK = 12.288mhz with fractional accumulator
-  reg [21:0] audgen_accum;
+  reg [21:0] audgen_accum = 0;
   parameter [20:0] CYCLE_48KHZ = 21'd122880 * 2;
   always @(posedge clk_74a) begin
     audgen_accum <= audgen_accum + CYCLE_48KHZ;
     if (audgen_accum >= 21'd742500) begin
-      audgen_mclk  <= ~audgen_mclk;
+      audio_mclk   <= ~audio_mclk;
       audgen_accum <= audgen_accum - 21'd742500 + CYCLE_48KHZ;
     end
   end
 
   // generate SCLK = 3.072mhz by dividing MCLK by 4
   reg [1:0] aud_mclk_divider;
+  reg prev_audio_mclk;
   wire audgen_sclk = aud_mclk_divider[1]  /* synthesis keep*/;
-  always @(posedge audgen_mclk) begin
-    aud_mclk_divider <= aud_mclk_divider + 1'b1;
+
+  always @(posedge clk_74a) begin
+    if (audio_mclk && ~prev_audio_mclk) begin
+      aud_mclk_divider <= aud_mclk_divider + 1'b1;
+    end
+
+    prev_audio_mclk <= audio_mclk;
   end
 
   // shift out audio data as I2S
@@ -66,52 +73,86 @@ module sound_i2s #(
   //
   // synchronize audio samples coming from the core
 
-  localparam CHANNEL_RIGHT_HIGH = SIGNED_INPUT ? 16 : 15;
-  localparam CHANNEL_LEFT_HIGH = 16 + CHANNEL_RIGHT_HIGH;
+  localparam CHANNEL_LEFT_HIGH = SIGNED_INPUT ? 16 : 15;
+  localparam CHANNEL_RIGHT_HIGH = 16 + CHANNEL_LEFT_HIGH;
+
+  // Width of channel with signed component
+  localparam SIGNED_CHANNEL_WIDTH = SIGNED_INPUT ? CHANNEL_WIDTH : CHANNEL_WIDTH + 1;
 
   wire [31:0] audgen_sampdata;
 
-  assign audgen_sampdata[CHANNEL_LEFT_HIGH-1:CHANNEL_LEFT_HIGH-CHANNEL_WIDTH] = audio_l;
-  assign audgen_sampdata[31-CHANNEL_WIDTH:16] = 0;
+  assign audgen_sampdata[CHANNEL_LEFT_HIGH-1:CHANNEL_LEFT_HIGH-CHANNEL_WIDTH]   = audio_l;
   assign audgen_sampdata[CHANNEL_RIGHT_HIGH-1:CHANNEL_RIGHT_HIGH-CHANNEL_WIDTH] = audio_r;
-  assign audgen_sampdata[15-CHANNEL_WIDTH:0] = 0;
 
   generate
-    if (~SIGNED_INPUT) begin
+    if (!SIGNED_INPUT) begin
       // If not signed, make sure high bit is 0
       assign audgen_sampdata[31] = 0;
       assign audgen_sampdata[15] = 0;
     end
   endgenerate
 
-  wire [31:0] audgen_sampdata_s;
-  synch_3 #(
-      .WIDTH(32)
-  ) s5 (
-      audgen_sampdata,
-      audgen_sampdata_s,
-      audgen_sclk
-  );
-  reg [31:0] audgen_sampshift;
-  reg [ 4:0] audgen_lrck_cnt;
-  always @(negedge audgen_sclk) begin
-    // output the next bit
-    audgen_dac <= audgen_sampshift[31];
-
-    // 48khz * 64
-    audgen_lrck_cnt <= audgen_lrck_cnt + 1'b1;
-    if (audgen_lrck_cnt == 31) begin
-      // switch channels
-      audgen_lrck <= ~audgen_lrck;
-
-      // Reload sample shifter
-      if (~audgen_lrck) begin
-        audgen_sampshift <= audgen_sampdata_s;
-      end
-    end else if (audgen_lrck_cnt < 16) begin
-      // only shift for 16 clocks per channel
-      audgen_sampshift <= {audgen_sampshift[30:0], 1'b0};
+  generate
+    if (15 - SIGNED_CHANNEL_WIDTH > 0) begin
+      assign audgen_sampdata[31-SIGNED_CHANNEL_WIDTH:16] = 0;
+      assign audgen_sampdata[15-SIGNED_CHANNEL_WIDTH:0]  = 0;
     end
+  endgenerate
+
+  sync_fifo #(
+      .WIDTH(32)
+  ) sync_fifo (
+      .clk_write(clk_audio),
+      .clk_read (clk_74a),
+
+      .write_en(write_en),
+      .data_in (audgen_sampdata),
+      .data_out(audgen_sampdata_s)
+  );
+
+  reg write_en = 0;
+  reg [CHANNEL_WIDTH - 1:0] prev_left;
+  reg [CHANNEL_WIDTH - 1:0] prev_right;
+
+  // Mark write when necessary
+  always @(posedge clk_audio) begin
+    prev_left  <= audio_l;
+    prev_right <= audio_r;
+
+    write_en   <= 0;
+
+    if (audio_l != prev_left || audio_r != prev_right) begin
+      write_en <= 1;
+    end
+  end
+
+  wire [31:0] audgen_sampdata_s;
+
+  reg [31:0] audgen_sampshift;
+  reg [4:0] audio_lrck_cnt;
+  reg prev_audgen_sclk;
+  always @(posedge clk_74a) begin
+    if (prev_audgen_sclk && ~audgen_sclk) begin
+      // output the next bit
+      audio_dac <= audgen_sampshift[31];
+
+      // 48khz * 64
+      audio_lrck_cnt <= audio_lrck_cnt + 1'b1;
+      if (audio_lrck_cnt == 31) begin
+        // switch channels
+        audio_lrck <= ~audio_lrck;
+
+        // Reload sample shifter
+        if (~audio_lrck) begin
+          audgen_sampshift <= audgen_sampdata_s;
+        end
+      end else if (audio_lrck_cnt < 16) begin
+        // only shift for 16 clocks per channel
+        audgen_sampshift <= {audgen_sampshift[30:0], 1'b0};
+      end
+    end
+
+    prev_audgen_sclk <= audgen_sclk;
   end
 
   initial begin

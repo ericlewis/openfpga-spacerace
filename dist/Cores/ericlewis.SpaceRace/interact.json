@@ -3,46 +3,30 @@
         "magic": "APF_VER_1",
         "variables": [
             {
-                "id": 1,
-                "name": "Use Ctrl 2 for P2",
+                "name": "2 Credits Per Coin",
+                "id": 2,
                 "type": "check",
                 "enabled": true,
                 "persist": true,
                 "writeonly": true,
-                "address": "0x00300000",
+                "address": "0x00400000",
                 "defaultval": 0,
                 "value": 1
             },
             {
-                "name": "Credit Per Coin",
-                "id": 2,
-                "type": "slider_u32",
-                "enabled": true,
-                "persist": true,
-                "writeonly": true,
-                "address": "0x00400000",
-                "defaultval": 2,
-                "graphical": {
-                  "min": 1,
-                  "max": 2,
-                  "adjust_small": 1,
-                  "adjust_large": 1
-                }
-            },
-            {
-                "name": "Playtime [%]",
+                "name": "Playtime",
                 "id": 3,
                 "type": "slider_u32",
                 "enabled": true,
                 "persist": true,
                 "writeonly": true,
                 "address": "0x00500000",
-                "defaultval": 100,
+                "defaultval": 10,
                 "graphical": {
                   "min": 0,
-                  "max": 100,
-                  "adjust_small": 10,
-                  "adjust_large": 20
+                  "max": 10,
+                  "adjust_small": 1,
+                  "adjust_large": 2
                 }
             }
         ],
